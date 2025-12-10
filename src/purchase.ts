@@ -85,8 +85,10 @@ export const purchasePlan = async (
 
   try {
     browser = await puppeteer.launch({
-      headless: true,
+      headless: "new",
       args: [
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
         "--disable-web-security",
         "--allow-running-insecure-content",
         "--ignore-certificate-errors",
