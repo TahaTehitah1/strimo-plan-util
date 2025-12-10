@@ -188,7 +188,7 @@ export const purchasePlan = async (
     }
 
     // Build complete credentials with server info
-    const serverUrl = process.env.IPTV_SERVER_URL || "http://ky-tv.ccc:8080";
+    const serverUrl = process.env.IPTV_SERVER_URL || "http://ky-tv.cc:8080";
     const backupServers = process.env.IPTV_BACKUP_SERVERS || "";
     const portalURL = process.env.MAG_PORTAL_URL || "";
 
