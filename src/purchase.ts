@@ -81,11 +81,13 @@ export const purchasePlan = async (
   macAddress?: string,
   isFreeTrial: boolean = false
 ): Promise<PurchaseResult> => {
+  console.log(`PurchasePlan started: planId=${planId}, email=${email}, orderType=${orderType}, isFreeTrial=${isFreeTrial}`);
   let browser;
 
   try {
+    console.log('Launching Puppeteer browser (headless: false)');
     browser = await puppeteer.launch({
-      headless: "new",
+      headless: false,
       args: [
         "--no-sandbox",
         "--disable-setuid-sandbox",
@@ -95,17 +97,20 @@ export const purchasePlan = async (
       ],
     });
 
+    console.log('Creating new browser page');
     const page = await browser.newPage();
-    const timeout = 60000;
+    const timeout = 30000; // Reduced from 120000ms to 30000ms for better performance
     page.setDefaultTimeout(timeout);
+    console.log(`Page timeout set to ${timeout}ms`);
 
     // Handle dialogs automatically
     page.on("dialog", async (dialog) => {
-      console.log(dialog.message());
+      console.log(`Dialog detected: ${dialog.message()}`);
       await dialog.accept();
     });
 
     // Navigate to the IPTV provider
+    console.log('Checking IPTV provider URL configuration');
     const baseUrl = process.env.IPTV_PROVIDER_URL;
 
     if (!baseUrl) {
@@ -114,13 +119,18 @@ export const purchasePlan = async (
 
     const endpoint = orderType === "MAG_DEVICE" ? "/mag" : "/line";
     let providerUrl = baseUrl + endpoint;
+    console.log(`Navigating to provider URL: ${providerUrl}`);
 
     await page.goto(providerUrl, {
-      waitUntil: "networkidle2",
+      waitUntil: "networkidle0", // Changed from domcontentloaded to networkidle0 for better performance
     });
 
+    console.log(`Navigation complete. Current URL: ${page.url()}`);
+
     // Check if login is required
+    console.log('Checking if login is required');
     if (page.url().includes("login")) {
+      console.log('Login required, entering credentials');
       const providerUsername = process.env.IPTV_PROVIDER_USERNAME;
       const providerPassword = process.env.IPTV_PROVIDER_PASSWORD;
 
@@ -130,15 +140,21 @@ export const purchasePlan = async (
         );
       }
 
+      console.log('Filling login form');
       await page.type("#username", providerUsername);
       await page.type("#password", providerPassword);
+      console.log('Submitting login form');
       await Promise.all([
-        page.waitForNavigation({ waitUntil: "networkidle2" }),
+        page.waitForNavigation({ waitUntil: "networkidle0" }), // Changed from domcontentloaded to networkidle0 for better performance
         page.click("#login_button"),
       ]);
+      console.log('Login navigation complete');
+    } else {
+      console.log('Login not required');
     }
 
     // Select the package/plan
+    console.log(`Selecting plan: ${planId}`);
     await page.select("#package", planId);
 
     let username = "";
@@ -146,6 +162,7 @@ export const purchasePlan = async (
 
     if (orderType === "STANDARD") {
       // Generate credentials for standard orders
+      console.log('Generating credentials for standard order');
       username = generateUsernameFromEmail(email);
       password = generatePassword();
 
@@ -153,10 +170,12 @@ export const purchasePlan = async (
       console.log(`Generated Password: ${password}`);
 
       // Fill in the form
+      console.log('Filling standard order form');
       await page.type("#username", username);
       await page.type("#password", password);
     } else {
       // Handle MAG_DEVICE orders
+      console.log('Processing MAG_DEVICE order');
       if (!macAddress) {
         throw new Error("macAddress is required for MAG_DEVICE orders");
       }
@@ -164,6 +183,7 @@ export const purchasePlan = async (
       console.log(`Using MAC address: ${macAddress}`);
 
       // Fill in the MAC address
+      console.log('Filling MAG device form with MAC address');
       await page.type("#mac", macAddress);
 
       // For MAG devices, use MAC as username and empty password
@@ -172,24 +192,32 @@ export const purchasePlan = async (
     }
 
     // Click submit button
+    console.log('Clicking submit button for user details');
     await page.click("#user-details > ul > li > a");
 
+    console.log('Waiting for final submit button');
     await page.waitForSelector("#submit_button", { visible: true });
 
+    console.log('Clicking final submit button');
     await page.click("#submit_button");
 
     // Wait for navigation/confirmation
-    await page.waitForNavigation({ waitUntil: "networkidle2" });
+    console.log('Waiting for navigation after submission');
+    await page.waitForNavigation({ waitUntil: "networkidle0" }); // Changed from domcontentloaded to networkidle0 for better performance
+    // Add a small delay to ensure the page is fully processed
+    await page.waitForTimeout(2000);
 
     console.log(
       `Successfully purchased ${orderType} planId: ${planId} for email: ${email}`
     );
 
+    console.log('Closing browser');
     if (browser) {
       await browser.close();
     }
 
     // Build complete credentials with server info
+    console.log('Building purchase result with server information');
     const serverUrl = process.env.IPTV_SERVER_URL || "http://ky-tv.cc:8080";
     const backupServers = process.env.IPTV_BACKUP_SERVERS || "";
     const portalURL = process.env.MAG_PORTAL_URL || "";
@@ -205,15 +233,20 @@ export const purchasePlan = async (
       result.backupServers = backupServers;
       result.m3uUrl = `${serverUrl}/get.php?username=${username}&password=${password}&type=m3u_plus&output=ts`;
       result.epgUrl = `${serverUrl}/xmltv.php?username=${username}&password=${password}`;
+      console.log(`Generated M3U URL: ${result.m3uUrl}`);
+      console.log(`Generated EPG URL: ${result.epgUrl}`);
     } else {
       result.macAddress = macAddress;
       result.portalURL = portalURL;
+      console.log(`MAG device portal URL: ${result.portalURL}`);
     }
 
+    console.log(`PurchasePlan completed successfully for ${email}`);
     return result;
   } catch (error) {
     console.error("Error during purchase:", error);
 
+    console.log('Attempting to close browser after error');
     if (browser) {
       await browser.close();
     }
