@@ -85,9 +85,9 @@ export const purchasePlan = async (
   let browser;
 
   try {
-    console.log('Launching Puppeteer browser (headless: false)');
+    console.log('Launching Puppeteer browser (headless: true)');
     browser = await puppeteer.launch({
-      headless: false,
+      headless: true,
       args: [
         "--no-sandbox",
         "--disable-setuid-sandbox",
